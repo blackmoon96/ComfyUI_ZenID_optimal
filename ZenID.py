@@ -6,6 +6,7 @@ import numpy as np
 import math
 import cv2
 import PIL.Image
+import torch.nn.functional as F
 from .resampler import Resampler
 from .CrossAttentionPatch import Attn2Replace, instantid_attention
 from .utils import tensor_to_image
@@ -19,6 +20,10 @@ except ImportError:
 
 import torch.nn.functional as F
 from . import node_tools as node_helpers
+
+
+CACHED_MODELS = {}
+
 
 MODELS_DIR = os.path.join(folder_paths.models_dir, "instantid")
 if "instantid" not in folder_paths.folder_names_and_paths:
@@ -180,6 +185,17 @@ class ZenInstantIDModelLoader:
     CATEGORY = "ZenID"
 
     def load_model(self, instantid_file):
+        
+        cache_key = instantid_file
+
+       
+        if cache_key in CACHED_MODELS:
+            print(f"Loading InstantID model '{instantid_file}' from cache.")
+            return (CACHED_MODELS[cache_key],)
+            
+        
+        print(f"Loading InstantID model '{instantid_file}' for the first time...")
+        
         ckpt_path = folder_paths.get_full_path("instantid", instantid_file)
 
         model = comfy.utils.load_torch_file(ckpt_path, safe_load=True)
@@ -200,6 +216,9 @@ class ZenInstantIDModelLoader:
             clip_embeddings_dim=512,
             clip_extra_context_tokens=16,
         )
+        
+       
+        CACHED_MODELS[cache_key] = model
 
         return (model,)
 
@@ -280,6 +299,7 @@ class ApplyZenID:
                 "start_at": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.001, }),
                 "end_at": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.001, }),
                 "blur_kernel": ("INT", {"default": 51, "min": 1, "max": 101, "step": 2, }),
+                "combine_method": (["average", "norm_average"], {"default": "average"}),
             },
             "optional": {
                 "mask": ("MASK", ),
@@ -292,12 +312,35 @@ class ApplyZenID:
     CATEGORY = "ZenID"
 
     def load_insight_face(self, provider):
-        model = FaceAnalysis(name="antelopev2", root=INSIGHTFACE_DIR, providers=[provider + 'ExecutionProvider',]) # alternative to buffalo_l
-        model.prepare(ctx_id=0, det_size=(640, 640))
+        
+        cache_key = f"insightface_{provider}"
+        
+       
+        if cache_key in CACHED_MODELS:
+            print(f"Loading InsightFace model ({provider}) from cache.")
+            return CACHED_MODELS[cache_key]
 
+        
+        print(f"Loading InsightFace model ({provider}) for the first time...")
+        model = FaceAnalysis(name="antelopev2", root=INSIGHTFACE_DIR, providers=[provider + 'ExecutionProvider',])
+        model.prepare(ctx_id=0, det_size=(640, 640))
+        
+        
+        CACHED_MODELS[cache_key] = model
+        
         return model
     
     def load_model(self, instantid_file):
+        
+        cache_key = instantid_file
+
+        
+        if cache_key in CACHED_MODELS:
+            print(f"Loading InstantID model '{instantid_file}' from cache.")
+            return CACHED_MODELS[cache_key]
+            
+       
+        print(f"Loading InstantID model '{instantid_file}' for the first time...")
         ckpt_path = folder_paths.get_full_path("instantid", instantid_file)
 
         model = comfy.utils.load_torch_file(ckpt_path, safe_load=True)
@@ -318,6 +361,9 @@ class ApplyZenID:
             clip_embeddings_dim=512,
             clip_extra_context_tokens=16,
         )
+
+       
+        CACHED_MODELS[cache_key] = model
 
         return model
 
@@ -375,7 +421,7 @@ class ApplyZenID:
         mask = torch.from_numpy(mask).unsqueeze(0).float()
         return mask
 
-    def apply_instantid(self, instantid_file, insightface, control_net, model, clip, vae, image_source, image_face, start_at, end_at, weight=.8,blur_kernel = 51, ip_weight=None, cn_strength=None, noise=0.35, image_kps=None, mask=None, combine_embeds='average'):
+    def apply_instantid(self, instantid_file, insightface, control_net, model, clip, vae, image_source, image_face, start_at, end_at, weight=.8,blur_kernel = 51, ip_weight=None, cn_strength=None, noise=0.35, image_kps=None, mask=None, combine_embeds='average', combine_method="average"):
         
         #load instantid model
         instantid = self.load_model(instantid_file)
@@ -407,10 +453,40 @@ class ApplyZenID:
         ip_weight = weight if ip_weight is None else ip_weight
         cn_strength = weight if cn_strength is None else cn_strength
 
-        face_embed = extractFeatures(insightface, image)
-        if face_embed is None:
-            raise Exception('Reference Image: No face detected.')
+        all_embeddings = []
+        for i in range(image_face.shape[0]):
+            single_image_face = image_face[i].unsqueeze(0)
+            face_embed = extractFeatures(insightface, single_image_face)
+            if face_embed is not None:
+                # `face_embed` có thể có shape [1, 1, 512], ta squeeze để loại bỏ chiều không cần thiết
+                all_embeddings.append(face_embed.squeeze(0))
 
+        if not all_embeddings:
+            raise Exception('No faces detected in any of the provided reference images.')
+
+        # 2. Kết hợp các embedding lại thành một
+        if len(all_embeddings) > 1:
+            print(f"Detected {len(all_embeddings)} faces. Combining them using '{combine_method}' method.")
+            stacked_embeddings = torch.cat(all_embeddings, dim=0)
+            
+            if combine_method == "average":
+                final_embedding = torch.mean(stacked_embeddings, dim=0, keepdim=True)
+            elif combine_method == "norm_average":
+                norm_embeddings = F.normalize(stacked_embeddings, p=2, dim=1)
+                final_embedding = torch.mean(norm_embeddings, dim=0, keepdim=True)
+            else:
+                # Mặc định là average nếu có giá trị không hợp lệ
+                final_embedding = torch.mean(stacked_embeddings, dim=0, keepdim=True)
+        else:
+            final_embedding = all_embeddings[0]
+
+        # `final_embedding` là kết quả cuối cùng, giờ gán nó cho clip_embed
+        clip_embed = final_embedding.unsqueeze(1)
+
+        # ==================== KẾT THÚC KHỐI CODE THAY THẾ ====================
+
+
+        # Phần xử lý keypoints (face_kps) giữ nguyên như cũ
         # if no keypoints image is provided, use the image itself (only the first one in the batch)
         face_kps = extractFeatures(insightface, image_kps if image_kps is not None else image_source[0].unsqueeze(0), extract_kps=True)
 
@@ -418,14 +494,7 @@ class ApplyZenID:
             face_kps = torch.zeros_like(image) if image_kps is None else image_kps
             print(f"\033[33mWARNING: No face detected in the keypoints image!\033[0m")
 
-        clip_embed = face_embed
-        # InstantID works better with averaged embeds (TODO: needs testing)
-        if clip_embed.shape[0] > 1:
-            if combine_embeds == 'average':
-                clip_embed = torch.mean(clip_embed, dim=0).unsqueeze(0)
-            elif combine_embeds == 'norm average':
-                clip_embed = torch.mean(clip_embed / torch.norm(clip_embed, dim=0, keepdim=True), dim=0).unsqueeze(0)
-
+        # Phần xử lý noise và các bước còn lại giữ nguyên như cũ
         if noise > 0:
             seed = int(torch.sum(clip_embed).item()) % 1000000007
             torch.manual_seed(seed)
@@ -541,12 +610,35 @@ class ZenIDCombineFace:
     CATEGORY = "ZenID"
 
     def load_insight_face(self, provider):
-        model = FaceAnalysis(name="antelopev2", root=INSIGHTFACE_DIR, providers=[provider + 'ExecutionProvider',]) # alternative to buffalo_l
-        model.prepare(ctx_id=0, det_size=(640, 640))
+       
+        cache_key = f"insightface_{provider}"
+        
+        
+        if cache_key in CACHED_MODELS:
+            print(f"Loading InsightFace model ({provider}) from cache.")
+            return CACHED_MODELS[cache_key]
 
+       
+        print(f"Loading InsightFace model ({provider}) for the first time...")
+        model = FaceAnalysis(name="antelopev2", root=INSIGHTFACE_DIR, providers=[provider + 'ExecutionProvider',])
+        model.prepare(ctx_id=0, det_size=(640, 640))
+        
+        
+        CACHED_MODELS[cache_key] = model
+        
         return model
     
     def load_model(self, instantid_file):
+        
+        cache_key = instantid_file
+
+        
+        if cache_key in CACHED_MODELS:
+            print(f"Loading InstantID model '{instantid_file}' from cache.")
+            return CACHED_MODELS[cache_key]
+            
+       
+        print(f"Loading InstantID model '{instantid_file}' for the first time...")
         ckpt_path = folder_paths.get_full_path("instantid", instantid_file)
 
         model = comfy.utils.load_torch_file(ckpt_path, safe_load=True)
@@ -567,6 +659,9 @@ class ZenIDCombineFace:
             clip_embeddings_dim=512,
             clip_extra_context_tokens=16,
         )
+
+        
+        CACHED_MODELS[cache_key] = model
 
         return model
 
