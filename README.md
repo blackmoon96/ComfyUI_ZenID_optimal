@@ -1,13 +1,13 @@
-🌟 ZenID: High-Performance Face Swap & Fusion 🌟
+#🌟 ZenID: High-Performance Face Swap & Fusion 🌟
 A Performance-Optimized Fork
 This repository is a fork of the original ZenID by vuongminh1907/ZenAI. All credit for the core functionality and original concept goes to them.
 This version focuses on dramatic performance and workflow enhancements, inspired by our deep dive into optimizing ComfyUI processes. The goal is to make high-resolution face swapping faster and more accessible on a wider range of hardware.
-✨ If you find these enhancements useful, please consider starring both this project and the original ZenID repository! ✨
+#✨ If you find these enhancements useful, please consider starring both this project and the original ZenID repository! ✨
 🚀 What's New in This Fork
 The primary enhancement in this version is the introduction of a High-Performance, Region-Based Workflow.
-⚡ Blazing Fast Speed: By intelligently cropping and processing only the masked face/head region, generation time is drastically reduced (often 2-4x faster).
-📉 Lower VRAM Usage: Smaller processing windows mean significantly less VRAM is required, enabling high-resolution swaps on more modest GPUs.
-🎯 Focused Detail: All generative power is concentrated on the target area, leading to potentially higher-quality details.
+#⚡ Blazing Fast Speed: By intelligently cropping and processing only the masked face/head region, generation time is drastically reduced (often 2-4x faster).
+#📉 Lower VRAM Usage: Smaller processing windows mean significantly less VRAM is required, enabling high-resolution swaps on more modest GPUs.
+#🎯 Focused Detail: All generative power is concentrated on the target area, leading to potentially higher-quality details.
 This is achieved by integrating with powerful community nodes like ComfyUI-Inpaint-CropAndStitch. We provide an optimized workflow that handles this process automatically.
 
 
