@@ -1,22 +1,52 @@
-🌟 ZenID: High-Performance Face Swap & Fusion 🌟
-A Performance-Optimized Fork
-This repository is a fork of the original ZenID by vuongminh1907/ZenAI. All credit for the core functionality and original concept goes to them.
+# 🌟 ZenID: High-Performance Face Swap & Fusion 🌟
+### (A Performance & Feature Optimized Fork)
 
-This version focuses on dramatic performance and workflow enhancements, inspired by our deep dive into optimizing ComfyUI processes. The goal is to make high-resolution face swapping faster and more accessible on a wider range of hardware.
+This project is a **fork** of the original [**ZenID by vuongminh1907/ZenAI**](https://github.com/vuongminh1907/ComfyUI_ZenID), focusing on significant improvements to both performance and core functionality. All credit for the original concept and foundational work goes to the original authors.
 
-✨ If you find these enhancements useful, please consider starring both this project and the original ZenID repository! ✨
+This version is the result of extensive research and development aimed at solving two key challenges: optimizing performance and enhancing feature capabilities.
 
-🚀 What's New in This Fork
+**✨ If you find these enhancements useful, please consider starring both this project and the [original ZenID repository](https://github.com/vuongminh1907/ComfyUI_ZenID) to support the community! ✨**
 
-The primary enhancement in this version is the introduction of a High-Performance, Region-Based Workflow.
+---
 
-⚡ Blazing Fast Speed: By intelligently cropping and processing only the masked face/head region, generation time is drastically reduced (often 2-4x faster).
+## 📑 **Table of Contents**
+1. [🚀 **Key Enhancements in This Fork**](#enhancements)
+    * [Performance Optimizations (Caching & Workflow)](#performance)
+    * [Feature Upgrades (Multi-Image Processing)](#features)
+2. [✨ Original ZenID Features](#original-features)
+3. [⚙️ Installation](#installation)
 
-📉 Lower VRAM Usage: Smaller processing windows mean significantly less VRAM is required, enabling high-resolution swaps on more modest GPUs.
+---
 
-🎯 Focused Detail: All generative power is concentrated on the target area, leading to potentially higher-quality details.
+## 🚀 **Key Enhancements in This Fork** <a name="enhancements"></a>
 
-This is achieved by integrating with powerful community nodes like ComfyUI-Inpaint-CropAndStitch. We provide an optimized workflow that handles this process automatically.
+### 1. Performance Optimizations (Caching & Workflow) <a name="performance"></a>
+
+#### a. Smart Model Caching
+- **The Problem:** The original version reloads models (InstantID, InsightFace) on every workflow execution, causing unnecessary delays.
+- **The Solution:** This version integrates a **smart caching mechanism**. Models are loaded into VRAM only once per session.
+- **The Result:** Subsequent runs are **nearly instantaneous**, saving a significant amount of waiting time.
+
+#### b. High-Performance Regional Workflow
+- **The Problem:** Processing an entire high-resolution image just to change a small area is inefficient.
+- **The Solution:** We provide an advanced workflow that utilizes a **"Crop & Stitch"** technique. This process intelligently crops only the masked area, runs the Face Swap process on that small region, and then seamlessly stitches the result back into the original image.
+- **The Result:**
+    - **⚡ Blazing Fast Speed:** Generation time is dramatically reduced.
+    - **📉 Lower VRAM Usage:** Allows for high-resolution face swaps even on GPUs with limited VRAM.
+- **Requirement:** This workflow requires the **[ComfyUI-Inpaint-CropAndStitch](https://github.com/lquesada/ComfyUI-Inpaint-CropAndStitch)** custom node.
+
+**➡️ Download and try the high-performance workflow here:** [`ZenID_HiPerf_FaceSwap.json`](https://github.com/blackmoon96/ComfyUI_ZenID_optimal/blob/main/workflow/ZenID_HiPerf_FaceSwap.json)
+
+
+### 2. Feature Upgrades (Multi-Image Processing) <a name="features"></a>
+
+#### a. Embedding Combination from Multiple Reference Images
+- **The Problem:** A single reference photo may not capture the full essence of a person's face across different angles and lighting conditions.
+- **The Solution:** The `ApplyZenID` node now accepts a **batch of face images** as input. It automatically extracts an embedding from each image and combines them into a single, more robust and accurate representative embedding.
+- **The Result:** **Facial accuracy and consistency are significantly improved**, especially when generating a character in various poses and scenes.
+- **Options:** Provides different combination methods (e.g., `average`, `norm_average`) for fine-tuning.
+
+---
 
 
 
